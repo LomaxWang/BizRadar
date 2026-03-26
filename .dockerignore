@@ -1,0 +1,13 @@
+.env
+.git
+__pycache__
+data/*.db
+output/*.md
+.venv
+tests
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.coverage
+htmlcov
+.DS_Store
