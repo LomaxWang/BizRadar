@@ -193,6 +193,7 @@ class SqliteManager:
         *,
         min_score: int = 0,
         source: Optional[str] = None,
+        search: Optional[str] = None,
         page: int = 1,
         size: int = 20,
     ) -> tuple[int, list[IdeaRecord]]:
@@ -204,6 +205,9 @@ class SqliteManager:
         if source:
             where.append("source = ?")
             params.append(source)
+        if search:
+            where.append("(title LIKE ? OR markdown_prd LIKE ?)")
+            params.extend([f"%{search}%", f"%{search}%"])
         wh = " AND ".join(where)
         cur = self._conn.execute(f"SELECT COUNT(*) FROM ideas WHERE {wh}", params)
         total = int(cur.fetchone()[0])
