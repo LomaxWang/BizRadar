@@ -1,0 +1,948 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>IdeaHunter · 商业雷达</title>
+  <meta name="description" content="IdeaHunter 可视化大盘——自动挖掘高价值 Micro-SaaS 商业机会" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <style>
+    :root {
+      --bg: #0a0e1a;
+      --bg2: #0f1625;
+      --bg3: #162032;
+      --border: rgba(99,179,237,0.12);
+      --border2: rgba(99,179,237,0.22);
+      --text: #e2e8f7;
+      --muted: #7a8faa;
+      --accent: #4f9cf9;
+      --accent2: #7c3aed;
+      --green: #22d3a5;
+      --yellow: #f6c90e;
+      --red: #f06080;
+      --radius: 14px;
+      --shadow: 0 8px 32px rgba(0,0,0,0.45);
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-size: 15px; scroll-behavior: smooth; }
+    body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; min-height: 100vh; line-height: 1.6; }
+
+    /* ── Scrollbar ── */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg2); }
+    ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+    /* ── Layout ── */
+    .app { display: flex; min-height: 100vh; }
+    .sidebar {
+      width: 230px; flex-shrink: 0; background: var(--bg2);
+      border-right: 1px solid var(--border);
+      display: flex; flex-direction: column; padding: 0 0 24px;
+      position: fixed; top: 0; left: 0; height: 100vh; z-index: 100;
+    }
+    .logo {
+      padding: 24px 20px 20px;
+      display: flex; align-items: center; gap: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    .logo-icon { width: 36px; height: 36px; border-radius: 10px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      display: flex; align-items: center; justify-content: center; font-size: 18px; }
+    .logo-text { font-weight: 700; font-size: 1.1rem; letter-spacing: -0.3px; }
+    .logo-sub { font-size: 0.7rem; color: var(--muted); }
+    nav { padding: 16px 10px; flex: 1; }
+    .nav-item {
+      display: flex; align-items: center; gap: 10px; padding: 9px 12px;
+      border-radius: 9px; cursor: pointer; transition: all .18s; color: var(--muted);
+      font-size: 0.88rem; font-weight: 500; user-select: none;
+    }
+    .nav-item:hover { background: var(--bg3); color: var(--text); }
+    .nav-item.active { background: rgba(79,156,249,0.12); color: var(--accent); }
+    .nav-item i { width: 18px; text-align: center; font-style: normal; font-size: 1rem; }
+    .sidebar-footer { padding: 0 16px; }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); display: inline-block; margin-right: 6px; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+    .main { flex: 1; margin-left: 230px; padding: 28px 32px; }
+    .page { display: none; }
+    .page.active { display: block; }
+
+    /* ── Header ── */
+    .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 28px; }
+    .page-title { font-size: 1.55rem; font-weight: 700; letter-spacing: -0.5px; }
+    .page-title span { color: var(--accent); }
+
+    /* ── Stats Cards ── */
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px,1fr)); gap: 16px; margin-bottom: 28px; }
+    .stat-card {
+      background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 20px 22px; position: relative; overflow: hidden; transition: border-color .2s;
+    }
+    .stat-card:hover { border-color: var(--border2); }
+    .stat-card::before {
+      content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+      background: var(--card-color, var(--accent));
+    }
+    .stat-label { font-size: 0.75rem; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; margin-bottom: 8px; }
+    .stat-value { font-size: 2rem; font-weight: 700; font-family: 'JetBrains Mono', monospace; }
+    .stat-sub { font-size: 0.75rem; color: var(--muted); margin-top: 4px; }
+
+    /* ── Buttons ── */
+    .btn {
+      display: inline-flex; align-items: center; gap: 7px;
+      padding: 8px 18px; border-radius: 9px; border: none; cursor: pointer;
+      font-size: 0.86rem; font-weight: 600; font-family: inherit;
+      transition: all .18s; text-decoration: none;
+    }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover { background: #3b82f6; transform: translateY(-1px); box-shadow: 0 4px 16px rgba(79,156,249,.35); }
+    .btn-ghost { background: var(--bg3); color: var(--text); border: 1px solid var(--border); }
+    .btn-ghost:hover { border-color: var(--border2); }
+    .btn-sm { padding: 5px 12px; font-size: 0.8rem; }
+    .btn:disabled { opacity: .5; cursor: not-allowed; transform: none !important; }
+
+    /* ── Filter bar ── */
+    .filter-bar { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; align-items: center; }
+    .input {
+      background: var(--bg2); border: 1px solid var(--border); border-radius: 9px;
+      color: var(--text); padding: 8px 14px; font-size: 0.85rem; font-family: inherit;
+      transition: border-color .18s; outline: none;
+    }
+    .input:focus { border-color: var(--accent); }
+    .input::placeholder { color: var(--muted); }
+    .input-sm { padding: 5px 10px; font-size: 0.8rem; }
+    select.input { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='%237a8faa' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14L2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; background-size: 12px; padding-right: 30px; }
+
+    /* ── Ideas Grid ── */
+    .ideas-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px,1fr)); gap: 16px; }
+    .idea-card {
+      background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 20px; cursor: pointer; transition: all .2s;
+    }
+    .idea-card:hover { border-color: var(--accent); transform: translateY(-2px); box-shadow: var(--shadow); }
+    .idea-card-header { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 12px; }
+    .score-badge {
+      flex-shrink: 0; width: 48px; height: 48px; border-radius: 12px; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; font-weight: 700; font-size: 1.1rem;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .score-high { background: rgba(34,211,165,.15); color: var(--green); }
+    .score-mid { background: rgba(246,201,14,.12); color: var(--yellow); }
+    .idea-title { font-weight: 600; font-size: 0.95rem; line-height: 1.4; }
+    .idea-meta { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+    .tag {
+      padding: 3px 8px; border-radius: 5px; font-size: 0.72rem; font-weight: 500;
+      background: rgba(99,179,237,.1); color: var(--accent); border: 1px solid rgba(99,179,237,.2);
+    }
+    .tag-source { background: rgba(124,58,237,.12); color: #a78bfa; border-color: rgba(124,58,237,.2); }
+    .idea-audience { font-size: 0.8rem; color: var(--muted); margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
+
+    /* ── Modal ── */
+    .modal-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,.72); z-index: 200;
+      display: flex; align-items: center; justify-content: center; padding: 24px;
+      backdrop-filter: blur(4px); opacity: 0; pointer-events: none; transition: opacity .22s;
+    }
+    .modal-overlay.open { opacity: 1; pointer-events: all; }
+    .modal {
+      background: var(--bg2); border: 1px solid var(--border2); border-radius: 18px;
+      width: 100%; max-width: 820px; max-height: 88vh; overflow: hidden;
+      display: flex; flex-direction: column; box-shadow: 0 24px 80px rgba(0,0,0,.7);
+      transform: scale(.96); transition: transform .22s;
+    }
+    .modal-overlay.open .modal { transform: scale(1); }
+    .modal-header { padding: 22px 26px 16px; border-bottom: 1px solid var(--border); display: flex; gap: 14px; align-items: flex-start; }
+    .modal-body { padding: 22px 26px; overflow-y: auto; flex: 1; }
+    .modal-close { margin-left: auto; cursor: pointer; color: var(--muted); font-size: 1.2rem; background: none; border: none; flex-shrink: 0; padding: 2px 6px; }
+    .modal-close:hover { color: var(--text); }
+    .prose { line-height: 1.75; font-size: 0.88rem; }
+    .prose h1,.prose h2,.prose h3 { color: var(--text); margin: 20px 0 10px; font-weight: 600; }
+    .prose h2 { font-size: 1.05rem; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+    .prose h3 { font-size: 0.95rem; color: var(--accent); }
+    .prose p { margin-bottom: 10px; color: var(--text); }
+    .prose ul,.prose ol { padding-left: 20px; margin-bottom: 10px; }
+    .prose li { margin-bottom: 4px; }
+    .prose code { background: var(--bg3); border-radius: 4px; padding: 1px 5px; font-family: 'JetBrains Mono',monospace; font-size: .85em; color: var(--accent); }
+    .prose pre { background: var(--bg3); border-radius: 8px; padding: 14px; overflow-x: auto; margin-bottom: 12px; }
+    .prose pre code { background: none; padding: 0; }
+    .prose blockquote { border-left: 3px solid var(--accent); padding-left: 14px; color: var(--muted); margin: 12px 0; }
+    .prose a { color: var(--accent); }
+
+    /* ── Scan form ── */
+    .scan-form { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; margin-bottom: 24px; }
+    .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px,1fr)); gap: 14px; margin-bottom: 18px; }
+    .form-group label { display: block; font-size: 0.78rem; color: var(--muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: .5px; }
+    .form-group .input { width: 100%; }
+
+    /* ── Tasks list ── */
+    .task-item {
+      background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius);
+      padding: 16px 20px; margin-bottom: 10px; display: flex; align-items: center; gap: 14px;
+    }
+    .task-status-badge {
+      padding: 3px 10px; border-radius: 6px; font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: .4px; flex-shrink: 0;
+    }
+    .task-pending { background: rgba(246,201,14,.12); color: var(--yellow); }
+    .task-processing { background: rgba(79,156,249,.12); color: var(--accent); }
+    .task-completed { background: rgba(34,211,165,.12); color: var(--green); }
+    .task-failed { background: rgba(240,96,128,.12); color: var(--red); }
+    .task-progress { font-size: 0.82rem; color: var(--muted); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .task-count { font-family: 'JetBrains Mono',monospace; font-size: 0.85rem; font-weight: 600; color: var(--green); flex-shrink: 0; }
+
+    /* ── Empty / Loading ── */
+    .empty { text-align: center; padding: 60px 20px; color: var(--muted); }
+    .empty-icon { font-size: 3rem; margin-bottom: 14px; }
+    .loading { display: flex; gap: 6px; justify-content: center; padding: 40px; }
+    .loading span { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); animation: bounce .8s ease-in-out infinite; }
+    .loading span:nth-child(2) { animation-delay: .15s; }
+    .loading span:nth-child(3) { animation-delay: .3s; }
+    @keyframes bounce { 0%,80%,100%{transform:translateY(0)} 40%{transform:translateY(-8px)} }
+
+    /* ── Toast ── */
+    .toast-container { position:fixed; bottom:24px; right:24px; z-index:999; display:flex; flex-direction:column; gap:8px; }
+    .toast { background: var(--bg3); border: 1px solid var(--border2); border-radius:10px; padding:12px 18px; font-size:.84rem; min-width:240px; box-shadow:var(--shadow); animation: fadeup .25s ease; }
+    .toast-success { border-left:3px solid var(--green); }
+    .toast-error { border-left:3px solid var(--red); }
+    @keyframes fadeup { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+
+    /* ── Pagination ── */
+    .pagination { display:flex; gap:8px; align-items:center; justify-content:center; margin-top:24px; }
+    .page-btn { width:34px; height:34px; border-radius:8px; border:1px solid var(--border); background:var(--bg2); color:var(--muted); cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:.85rem; transition:all .16s; }
+    .page-btn:hover { border-color:var(--accent); color:var(--accent); }
+    .page-btn.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+    .page-btn:disabled { opacity:.35; cursor:not-allowed; }
+
+    /* ── Responsive ── */
+    @media(max-width:768px){
+      .sidebar{width:200px}
+      .main{margin-left:200px; padding:16px}
+      .ideas-grid{grid-template-columns:1fr}
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="logo">
+      <div class="logo-icon">🎯</div>
+      <div>
+        <div class="logo-text">IdeaHunter</div>
+        <div class="logo-sub">商业雷达 · v0.1</div>
+      </div>
+    </div>
+    <nav>
+      <div class="nav-item active" data-page="dashboard">
+        <i>📊</i> 大盘总览
+      </div>
+      <div class="nav-item" data-page="ideas">
+        <i>💡</i> 商业点子库
+      </div>
+      <div class="nav-item" data-page="scan">
+        <i>🔍</i> 触发扫描
+      </div>
+      <div class="nav-item" data-page="tasks">
+        <i>📋</i> 任务列表
+      </div>
+      <div class="nav-item" data-page="processed">
+        <i>🗂️</i> 处理记录
+      </div>
+    </nav>
+    <div class="sidebar-footer">
+      <div style="font-size:.75rem;color:var(--muted);display:flex;align-items:center;">
+        <span class="status-dot"></span> API 在线
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main class="main">
+    <!-- Dashboard -->
+    <div class="page active" id="page-dashboard">
+      <div class="page-header">
+        <h1 class="page-title">大盘<span>总览</span></h1>
+        <button class="btn btn-primary" onclick="triggerQuickScan()">⚡ 快速扫描</button>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-card" style="--card-color:var(--green)">
+          <div class="stat-label">立项通过</div>
+          <div class="stat-value" id="stat-ideas">—</div>
+          <div class="stat-sub">高评分商业点子</div>
+        </div>
+        <div class="stat-card" style="--card-color:var(--accent)">
+          <div class="stat-label">已处理帖子</div>
+          <div class="stat-value" id="stat-processed">—</div>
+          <div class="stat-sub">累计分析条目</div>
+        </div>
+        <div class="stat-card" style="--card-color:var(--yellow)">
+          <div class="stat-label">运行中任务</div>
+          <div class="stat-value" id="stat-running">—</div>
+          <div class="stat-sub">后台 Agent 任务</div>
+        </div>
+        <div class="stat-card" style="--card-color:var(--accent2)">
+          <div class="stat-label">平均评分</div>
+          <div class="stat-value" id="stat-avg-score">—</div>
+          <div class="stat-sub">通过立项点子均分</div>
+        </div>
+      </div>
+      <h2 style="font-size:1rem;font-weight:600;margin-bottom:14px;color:var(--muted);">最近立项 TOP 6</h2>
+      <div class="ideas-grid" id="dashboard-ideas"></div>
+    </div>
+
+    <!-- Ideas -->
+    <div class="page" id="page-ideas">
+      <div class="page-header">
+        <h1 class="page-title">商业<span>点子库</span></h1>
+      </div>
+      <div class="filter-bar">
+        <input type="text" class="input" placeholder="🔍 关键词搜索（行业/痛点）" id="ideas-search" style="width:220px" />
+        <select class="input" id="ideas-source">
+          <option value="">全部来源</option>
+        </select>
+        <input type="number" class="input input-sm" placeholder="最低评分" id="ideas-min-score" min="0" max="100" style="width:100px" value="0" />
+        <button class="btn btn-ghost" onclick="loadIdeas(1)">筛选</button>
+      </div>
+      <div id="ideas-list" class="ideas-grid"></div>
+      <div class="pagination" id="ideas-pagination"></div>
+    </div>
+
+    <!-- Scan -->
+    <div class="page" id="page-scan">
+      <div class="page-header">
+        <h1 class="page-title">触发<span>扫描</span></h1>
+      </div>
+      <!-- ★ 一键扫描全部数据源 -->
+      <div class="scan-form" style="border:1.5px solid var(--accent);background:linear-gradient(135deg,rgba(99,102,241,.08),rgba(16,185,129,.06))">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+          <div>
+            <h3 style="font-size:1rem;font-weight:700;color:var(--accent);margin-bottom:4px">⚡ 一键扫描全部数据源</h3>
+            <p style="font-size:.8rem;color:var(--muted);margin:0">顺序扫描所有已配置数据源，自动跳过未填写 API Key 的平台</p>
+          </div>
+          <button class="btn btn-primary" id="btn-scan-all" onclick="submitScanAll()"
+            style="background:linear-gradient(135deg,#6366f1,#10b981);white-space:nowrap;font-size:.95rem;padding:10px 24px">
+            🔥 全源扫描
+          </button>
+        </div>
+        <div id="scan-all-sources" style="margin-top:14px;display:flex;flex-wrap:wrap;gap:6px"></div>
+      </div>
+      <!-- Scraper scan (single source) -->
+      <div class="scan-form">
+        <h3 style="font-size:.9rem;font-weight:600;margin-bottom:16px;color:var(--accent);">📡 单源扫描</h3>
+        <div class="form-grid">
+          <div class="form-group">
+            <label>数据来源</label>
+            <select class="input" id="scan-source">
+              <option value="">加载中...</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>最大抓取数</label>
+            <input type="number" class="input" id="scan-max-items" placeholder="留空=插件默认" min="1" max="500" />
+          </div>
+          <div class="form-group">
+            <label>关键词过滤（逗号分隔）</label>
+            <input type="text" class="input" id="scan-keywords" placeholder="效率工具, 太难用" />
+          </div>
+        </div>
+        <button class="btn btn-primary" id="btn-scan" onclick="submitScan()">🚀 启动扫描任务</button>
+      </div>
+      <!-- Webhook ingest -->
+      <div class="scan-form">
+        <h3 style="font-size:.9rem;font-weight:600;margin-bottom:16px;color:var(--accent2);">🔗 Webhook 外部注入</h3>
+        <div class="form-grid">
+          <div class="form-group">
+            <label>来源名称</label>
+            <input type="text" class="input" id="ingest-source" placeholder="zendesk_tickets" value="custom" />
+          </div>
+          <div class="form-group">
+            <label>关键词过滤（可选）</label>
+            <input type="text" class="input" id="ingest-keywords" placeholder="乱码, 导出" />
+          </div>
+        </div>
+        <div class="form-group" style="margin-bottom:16px">
+          <label>内容列表（每行一条）</label>
+          <textarea class="input" id="ingest-content" rows="5" style="width:100%;resize:vertical;line-height:1.5"
+            placeholder="客户A：你们导出的Excel总是乱码，每天浪费半小时&#10;客户B：能不能加一键发账单到微信群的功能"></textarea>
+        </div>
+        <button class="btn btn-ghost" id="btn-ingest" onclick="submitIngest()">📨 注入并分析</button>
+      </div>
+      <!-- Live task status -->
+      <div id="scan-task-status" style="display:none" class="scan-form">
+        <h3 style="font-size:.9rem;font-weight:600;margin-bottom:14px;">📡 实时进度</h3>
+        <div id="scan-task-inner"></div>
+        <!-- SSE live log -->
+        <div id="scan-live-log" style="margin-top:14px;max-height:320px;overflow-y:auto;
+             background:var(--bg1);border:1px solid var(--border);border-radius:8px;
+             padding:12px;font-size:.78rem;font-family:monospace;line-height:1.6;
+             display:none">
+        </div>
+      </div>
+    </div>
+
+    <!-- Tasks -->
+    <div class="page" id="page-tasks">
+      <div class="page-header">
+        <h1 class="page-title">任务<span>列表</span></h1>
+        <button class="btn btn-ghost btn-sm" onclick="loadTasks()">🔄 刷新</button>
+      </div>
+      <div id="tasks-list"></div>
+      <div class="pagination" id="tasks-pagination"></div>
+    </div>
+
+    <!-- Processed -->
+    <div class="page" id="page-processed">
+      <div class="page-header">
+        <h1 class="page-title">处理<span>记录</span></h1>
+      </div>
+      <div class="filter-bar">
+        <select class="input" id="proc-source">
+          <option value="">全部来源</option>
+        </select>
+        <select class="input" id="proc-outcome">
+          <option value="">全部结果</option>
+          <option value="approved">✅ 通过</option>
+          <option value="rejected">❌ 拒绝</option>
+          <option value="dropped">⬇️ 无痛点</option>
+          <option value="skipped_keywords">🔖 关键词跳过</option>
+          <option value="skipped_short">📏 内容过短</option>
+          <option value="error">⚠️ 错误</option>
+        </select>
+        <button class="btn btn-ghost" onclick="loadProcessed(1)">筛选</button>
+      </div>
+      <div id="processed-list"></div>
+      <div class="pagination" id="processed-pagination"></div>
+    </div>
+  </main>
+</div>
+
+<!-- Idea Detail Modal -->
+<div class="modal-overlay" id="modal-overlay" onclick="closeModal(event)">
+  <div class="modal" id="modal">
+    <div class="modal-header">
+      <div>
+        <div style="font-size:1.05rem;font-weight:700;margin-bottom:4px" id="modal-title"></div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap" id="modal-meta"></div>
+      </div>
+      <button class="modal-close" onclick="closeModalDirect()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="prose" id="modal-prd"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Toast container -->
+<div class="toast-container" id="toasts"></div>
+
+<script>
+const BASE = '/api/v1';
+let tasksPolling = {};
+
+// ── Navigation ──
+document.querySelectorAll('.nav-item').forEach(el => {
+  el.addEventListener('click', () => {
+    document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+    document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+    el.classList.add('active');
+    const pageId = 'page-' + el.dataset.page;
+    document.getElementById(pageId)?.classList.add('active');
+    onPageActivate(el.dataset.page);
+  });
+});
+
+function onPageActivate(name) {
+  if (name === 'dashboard') { loadDashboard(); }
+  if (name === 'ideas') { loadIdeas(1); }
+  if (name === 'tasks') { loadTasks(); }
+  if (name === 'processed') { loadProcessed(1); }
+}
+
+// ── API helper ──
+async function api(path, opts={}) {
+  const res = await fetch(BASE + path, {
+    headers: { 'Content-Type': 'application/json', ...opts.headers },
+    ...opts,
+  });
+  if (!res.ok && res.status !== 404) {
+    const t = await res.text().catch(()=>'');
+    throw new Error(`HTTP ${res.status}: ${t.slice(0,120)}`);
+  }
+  return res.json();
+}
+
+// ── Toast ──
+function toast(msg, type='success') {
+  const el = document.createElement('div');
+  el.className = `toast toast-${type}`;
+  el.textContent = msg;
+  document.getElementById('toasts').appendChild(el);
+  setTimeout(() => el.remove(), 3500);
+}
+
+// ── Dashboard ──
+async function loadDashboard() {
+  try {
+    const [ideasRes, procRes] = await Promise.all([
+      api('/ideas?size=6&min_score=0'),
+      api('/processed-items?size=1'),
+    ]);
+    const ideas = ideasRes.data?.items || [];
+    const total = ideasRes.data?.total || 0;
+    const procTotal = procRes.data?.total || 0;
+
+    document.getElementById('stat-ideas').textContent = total;
+    document.getElementById('stat-processed').textContent = procTotal;
+
+    // avg score
+    const scores = ideas.map(i=>i.score).filter(Boolean);
+    const avg = scores.length ? Math.round(scores.reduce((a,b)=>a+b,0)/scores.length) : '—';
+    document.getElementById('stat-avg-score').textContent = avg;
+
+    // render top ideas
+    const grid = document.getElementById('dashboard-ideas');
+    grid.innerHTML = ideas.length ? ideas.map(ideaCard).join('') : '<p class="empty" style="grid-column:1/-1"><span class="empty-icon">🔭</span><br>暂无数据，先触发一次扫描</p>';
+
+    // running tasks — try scheduler
+    const sched = await api('/scheduler/jobs').catch(()=>({data:{jobs:[]}}));
+    document.getElementById('stat-running').textContent = sched.data?.jobs?.length || 0;
+  } catch(e) {
+    console.error(e);
+  }
+}
+
+// ── Ideas ──
+let ideasPage = 1, ideasTotal = 0;
+async function loadIdeas(page=1) {
+  ideasPage = page;
+  const search = document.getElementById('ideas-search').value.trim();
+  const source = document.getElementById('ideas-source').value;
+  const minScore = document.getElementById('ideas-min-score').value || 0;
+  let url = `/ideas?page=${page}&size=12&min_score=${minScore}`;
+  if (source) url += `&source=${encodeURIComponent(source)}`;
+  if (search) url += `&search=${encodeURIComponent(search)}`;
+  const container = document.getElementById('ideas-list');
+  container.innerHTML = '<div class="loading"><span></span><span></span><span></span></div>';
+  try {
+    const res = await api(url);
+    const items = res.data?.items || [];
+    ideasTotal = res.data?.total || 0;
+    container.innerHTML = items.length ? items.map(ideaCard).join('') : '<p class="empty" style="grid-column:1/-1"><span class="empty-icon">💡</span><br>没有匹配的点子</p>';
+    renderPagination('ideas-pagination', page, Math.ceil(ideasTotal/12), 'loadIdeas');
+  } catch(e) { container.innerHTML = `<p style="color:var(--red)">加载失败: ${e.message}</p>`; }
+}
+
+function ideaCard(idea) {
+  const sc = idea.score >= 85 ? 'score-high' : 'score-mid';
+  const src = idea.source || '';
+  return `<div class="idea-card" onclick="showIdea('${idea.idea_id}')">
+    <div class="idea-card-header">
+      <div class="score-badge ${sc}">${idea.score}<div style="font-size:.6rem;font-weight:500;">分</div></div>
+      <div class="idea-title">${escHtml(idea.title)}</div>
+    </div>
+    <div class="idea-meta">
+      ${src ? `<span class="tag tag-source">${escHtml(src)}</span>` : ''}
+      <span class="tag">${idea.created_at?.slice(0,10)||''}</span>
+    </div>
+  </div>`;
+}
+
+async function showIdea(id) {
+  const res = await api(`/ideas/${id}`).catch(e=>{ toast('加载失败: '+e.message,'error'); return null; });
+  if (!res) return;
+  const it = res.data;
+  document.getElementById('modal-title').textContent = it.title;
+  const sc = it.score >= 85 ? 'color:var(--green)' : 'color:var(--yellow)';
+  document.getElementById('modal-meta').innerHTML = `
+    <span class="tag" style="${sc};border-color:currentColor">⭐ ${it.score} 分</span>
+    ${it.source ? `<span class="tag tag-source">${escHtml(it.source)}</span>` : ''}
+    ${(it.tech_stack||[]).map(t=>`<span class="tag">${escHtml(t)}</span>`).join('')}
+  `;
+  document.getElementById('modal-prd').innerHTML = marked.parse(it.markdown_prd || '*暂无内容*');
+  document.getElementById('modal-overlay').classList.add('open');
+}
+
+function closeModal(e) { if (e.target === document.getElementById('modal-overlay')) closeModalDirect(); }
+function closeModalDirect() { document.getElementById('modal-overlay').classList.remove('open'); }
+
+// ── 工具：保存 task_id 到 sessionStorage ──
+function saveTaskId(tid) {
+  if (!tid) return;
+  const ids = JSON.parse(sessionStorage.getItem('taskIds') || '[]');
+  if (!ids.includes(tid)) {
+    ids.unshift(tid);
+    sessionStorage.setItem('taskIds', JSON.stringify(ids.slice(0, 50)));
+  }
+}
+
+// ── Scan ──
+async function submitScan() {
+  const source = document.getElementById('scan-source').value;
+  const maxItems = parseInt(document.getElementById('scan-max-items').value) || null;
+  const kw = document.getElementById('scan-keywords').value.trim();
+  const keywords = kw ? kw.split(',').map(s=>s.trim()).filter(Boolean) : null;
+  const btn = document.getElementById('btn-scan');
+  btn.disabled = true; btn.textContent = '提交中…';
+  try {
+    const res = await api('/tasks/scan', {
+      method: 'POST',
+      body: JSON.stringify({ source, max_items: maxItems, keywords }),
+    });
+    const tid = res.data?.task_id;
+    saveTaskId(tid);  // ✅ 写入 sessionStorage
+    toast(`✅ 任务创建成功: ${tid}`);
+    btn.textContent = '🚀 启动扫描任务'; btn.disabled = false;
+    startTaskPolling(tid);
+  } catch(e) {
+    toast('❌ ' + e.message, 'error');
+    btn.textContent = '🚀 启动扫描任务'; btn.disabled = false;
+  }
+}
+
+async function submitIngest() {
+  const source_name = document.getElementById('ingest-source').value.trim() || 'custom';
+  const raw = document.getElementById('ingest-content').value.trim();
+  const kw = document.getElementById('ingest-keywords').value.trim();
+  if (!raw) { toast('请输入内容', 'error'); return; }
+  const content_list = raw.split('\n').map(s=>s.trim()).filter(Boolean);
+  const keywords = kw ? kw.split(',').map(s=>s.trim()).filter(Boolean) : null;
+  const btn = document.getElementById('btn-ingest');
+  btn.disabled = true; btn.textContent = '提交中…';
+  try {
+    const res = await api('/webhooks/ingest', {
+      method: 'POST',
+      body: JSON.stringify({ source_name, content_list, keywords }),
+    });
+    const tid = res.data?.task_id;
+    saveTaskId(tid);  // ✅ 写入 sessionStorage
+    toast(`✅ 注入成功: ${tid}`);
+    btn.textContent = '📨 注入并分析'; btn.disabled = false;
+    startTaskPolling(tid);
+  } catch(e) {
+    toast('❌ ' + e.message, 'error');
+    btn.textContent = '📨 注入并分析'; btn.disabled = false;
+  }
+}
+
+async function triggerQuickScan() {
+  document.querySelector('[data-page="scan"]').click();
+  await new Promise(r=>setTimeout(r,100));
+  submitScan();
+}
+
+// ── 一键扫描全部数据源 ──
+async function submitScanAll() {
+  const btn = document.getElementById('btn-scan-all');
+  btn.disabled = true; btn.textContent = '启动中…';
+  try {
+    const res = await api('/tasks/scan-all', { method: 'POST', body: '{}' });
+    const { task_id, sources, skipped, count } = res.data;
+    saveTaskId(task_id);
+    toast(`🔥 全源扫描已启动：${count} 个数据源`, 'success');
+    btn.textContent = `⏳ 扫描中(${count}源)…`;
+
+    // 更新数据源标签颜色（标记哪些被跳过）
+    document.querySelectorAll('#scan-all-sources .src-badge').forEach(el => {
+      const s = el.dataset.source;
+      el.style.opacity = (skipped||[]).includes(s) ? '0.35' : '1';
+      el.style.textDecoration = (skipped||[]).includes(s) ? 'line-through' : 'none';
+    });
+
+    startTaskPolling(task_id, () => {
+      btn.textContent = '🔥 全源扫描'; btn.disabled = false;
+    });
+  } catch(e) {
+    toast('❌ ' + e.message, 'error');
+    btn.textContent = '🔥 全源扫描'; btn.disabled = false;
+  }
+}
+
+function startTaskPolling(tid, onDone) {
+  document.getElementById('scan-task-status').style.display = 'block';
+  const inner = document.getElementById('scan-task-inner');
+  const logBox = document.getElementById('scan-live-log');
+  inner.innerHTML = taskStatusHtml({task_id:tid,status:'pending',progress:'等待中',result_count:0});
+  logBox.style.display = 'block';
+  logBox.innerHTML = '<span style="color:var(--muted)">⏳ 等待后台任务启动...</span><br>';
+
+  // ── SSE 实时流 ──
+  const sse = new EventSource(`/api/v1/tasks/${tid}/stream`);
+
+  const EVENT_ICONS = {
+    fetch_done:'📥', item_start:'🔍', extractor:'🧠',
+    critic:'⚖️', approved:'💡', rejected:'🚫',
+    error_item:'⚠️', done:'✅', pipeline_error:'❌',
+    scan_all_start:'🚀', source_start:'📌', source_done:'✔️',
+    source_error:'💥', scan_all_done:'🏁',
+  };
+
+  function appendLog(html) {
+    logBox.innerHTML += html + '<br>';
+    logBox.scrollTop = logBox.scrollHeight;
+  }
+
+  // 更新全源扫描中的数据源徽章状态
+  function setBadgeStatus(source, status) {
+    const badge = document.querySelector(`#scan-all-sources [data-source="${source}"]`);
+    if (!badge) return;
+    const colors = { active:'#6366f1', done:'#10b981', error:'#f87171' };
+    if (colors[status]) badge.style.borderColor = colors[status];
+    if (status === 'done') badge.textContent = `✓ ${source}`;
+    if (status === 'active') badge.textContent = `⟳ ${source}`;
+    if (status === 'error') badge.textContent = `✗ ${source}`;
+  }
+
+  sse.onmessage = (e) => {
+    let ev;
+    try { ev = JSON.parse(e.data); } catch { return; }
+    const srcTag = ev.source ? `<span style="color:#a78bfa;margin-right:4px">[${ev.source}]</span>` : '';
+    const icon = EVENT_ICONS[ev.type] || '•';
+    const ts = new Date().toLocaleTimeString();
+
+    if (ev.type === 'ping') return;
+    if (ev.type === '__close__') { sse.close(); return; }
+
+    let msg = '';
+    switch (ev.type) {
+      case 'scan_all_start':
+        msg = `<span style="color:#a78bfa;font-weight:600">${icon} 全源扫描启动，共 ${ev.count} 个数据源: ${(ev.sources||[]).join(', ')}</span>`; break;
+      case 'source_start':
+        setBadgeStatus(ev.source, 'active');
+        msg = `<span style="color:#c4b5fd;font-weight:600">${icon} [${ev.index}/${ev.total}] 开始扫描数据源: <b>${ev.source}</b></span>`; break;
+      case 'source_done':
+        setBadgeStatus(ev.source, 'done');
+        msg = `<span style="color:#34d399">${icon} ${ev.source} 完成 — 立项 ${ev.approved}个 / 共采集 ${ev.fetched}条</span>`; break;
+      case 'source_error':
+        setBadgeStatus(ev.source, 'error');
+        msg = `<span style="color:#f87171">${icon} ${ev.source} 出错: ${escHtml(ev.msg||'')}</span>`; break;
+      case 'scan_all_done':
+        msg = `<span style="color:#6ee7b7;font-weight:700;font-size:1.05em">${icon} 全源扫描完成！共立项 ${ev.total_approved} 个商业机会（${ev.sources_count} 个数据源）</span>`;
+        api(`/tasks/${tid}`).then(r=>{ inner.innerHTML = taskStatusHtml(r.data); });
+        setTimeout(loadDashboard, 800);
+        if (ev.total_approved > 0) toast(`🎉 全源扫描完成！发现 ${ev.total_approved} 个商业机会`);
+        if (onDone) onDone();
+        sse.close(); break;
+      case 'fetch_done':
+        msg = `${srcTag}<span style="color:#a78bfa">${icon} 采集完成：共 ${ev.count} 条原始内容</span>`; break;
+      case 'item_start':
+        msg = `${srcTag}<span style="color:var(--muted)">${icon} [${ev.index}/${ev.total}] ${escHtml(ev.title||'')}</span>`; break;
+      case 'extractor':
+        msg = ev.has_pain
+          ? `${srcTag}<span style="color:#34d399">${icon} 痛点：${escHtml(ev.summary||'')}</span>`
+          : `${srcTag}<span style="color:var(--muted)">${icon} 无痛点，跳过</span>`; break;
+      case 'critic': {
+        const color = ev.score >= 65 ? '#fbbf24' : '#94a3b8';
+        msg = `${srcTag}<span style="color:${color}">${icon} 评分 <b>${ev.score}</b>分 — ${escHtml((ev.reasoning||'').slice(0,80))}</span>`; break;
+      }
+      case 'approved':
+        msg = `${srcTag}<span style="color:#34d399;font-weight:600">${icon} 立项！[${ev.score}分] ${escHtml(ev.title||'')}</span>`; break;
+      case 'rejected':
+        msg = `${srcTag}<span style="color:#f87171">${icon} 不通过 [${ev.score}分] ${escHtml(ev.title||'')}</span>`; break;
+      case 'done':
+        msg = `${srcTag}<span style="color:#6ee7b7;font-weight:600">${icon} 扫描完成 — 立项: ${ev.approved}个 | 拒绝: ${ev.rejected}个 | 总: ${ev.total}条</span>`;
+        api(`/tasks/${tid}`).then(r=>{ inner.innerHTML = taskStatusHtml(r.data); });
+        if (tasksPolling[tid]) { clearInterval(tasksPolling[tid]); delete tasksPolling[tid]; }
+        setTimeout(loadDashboard, 1000);
+        if (ev.approved > 0) toast(`🎉 扫描完成！发现 ${ev.approved} 个商业机会`);
+        if (onDone) onDone();
+        sse.close(); break;
+      case 'pipeline_error':
+        msg = `<span style="color:#f87171">${icon} 流水线错误: ${escHtml(ev.msg||'')}</span>`;
+        api(`/tasks/${tid}`).then(r=>{ inner.innerHTML = taskStatusHtml(r.data); });
+        if (onDone) onDone();
+        sse.close(); break;
+      default:
+        msg = `${srcTag}<span style="color:var(--muted)">${icon} ${ev.type}</span>`;
+    }
+    if (msg) appendLog(`<span style="color:var(--muted);margin-right:6px">[${ts}]</span>${msg}`);
+  };
+
+  sse.onerror = () => {
+    sse.close();
+    if (!tasksPolling[tid]) {
+      tasksPolling[tid] = setInterval(async () => {
+        const res = await api(`/tasks/${tid}`).catch(()=>null);
+        if (!res) return;
+        const t = res.data;
+        inner.innerHTML = taskStatusHtml(t);
+        if (t.status === 'completed' || t.status === 'failed') {
+          clearInterval(tasksPolling[tid]); delete tasksPolling[tid];
+          if (t.status === 'completed') toast(`🎉 任务完成！发现 ${t.result_count} 个商业机会`);
+          else toast(`⚠️ 任务失败`, 'error');
+          if (onDone) onDone();
+        }
+      }, 2000);
+    }
+  };
+
+  if (tasksPolling[tid]) clearInterval(tasksPolling[tid]);
+}
+
+// ── Tasks ──
+let taskItems = [], taskPage = 1;
+async function loadTasks() {
+  const container = document.getElementById('tasks-list');
+  container.innerHTML = '<div class="loading"><span></span><span></span><span></span></div>';
+  const ids = JSON.parse(sessionStorage.getItem('taskIds') || '[]');
+  if (!ids.length) {
+    container.innerHTML = '<div class="empty"><div class="empty-icon">📋</div><p>暂无任务记录<br><small>触发扫描后会自动出现在这里</small></p></div>';
+    return;
+  }
+  const results = await Promise.all(ids.slice(0,30).map(id=>api(`/tasks/${id}`).catch(()=>null)));
+  const tasks = results.filter(Boolean).map(r=>r.data).filter(Boolean);
+  tasks.sort((a,b)=>b.created_at?.localeCompare(a.created_at||'')||0);
+  container.innerHTML = tasks.map(taskStatusHtml).join('');
+}
+
+function taskStatusHtml(t) {
+  const cls = `task-${t.status}`;
+  const statusLabel = {pending:'等待',processing:'运行中',completed:'已完成',failed:'失败'}[t.status]||t.status;
+  return `<div class="task-item">
+    <span class="task-status-badge ${cls}">${statusLabel}</span>
+    <div class="task-progress" title="${escHtml(t.error||t.progress||'')}">
+      ${escHtml(t.progress||t.task_id||'')}
+      ${t.error ? `<span style="color:var(--red)"> • ${escHtml(t.error.slice(0,80))}</span>` : ''}
+    </div>
+    ${t.result_count != null ? `<div class="task-count">+${t.result_count}</div>` : ''}
+    <div style="font-size:.75rem;color:var(--muted);flex-shrink:0">${t.task_id?.slice(0,18)||''}</div>
+  </div>`;
+}
+
+let procPage = 1, procTotal = 0;
+async function loadProcessed(page=1) {
+  procPage = page;
+  const source = document.getElementById('proc-source').value;
+  const outcome = document.getElementById('proc-outcome').value;
+  let url = `/processed-items?page=${page}&size=20`;
+  if (source) url += `&source=${encodeURIComponent(source)}`;
+  if (outcome) url += `&outcome=${encodeURIComponent(outcome)}`;
+  const container = document.getElementById('processed-list');
+  container.innerHTML = '<div class="loading"><span></span><span></span><span></span></div>';
+  try {
+    const res = await api(url);
+    const items = res.data?.items || [];
+    procTotal = res.data?.total || 0;
+    if (!items.length) {
+      container.innerHTML = '<div class="empty"><span class="empty-icon">🗂️</span><p>暂无记录</p></div>';
+      return;
+    }
+    const outcomeIcon = {approved:'✅',rejected:'❌',dropped:'⬇️',skipped_keywords:'🔖',skipped_short:'📏',error:'⚠️'};
+    const outcomeCls  = {approved:'task-completed',rejected:'task-failed',error:'task-failed'};
+    container.innerHTML = items.map(it => {
+      const icon = outcomeIcon[it.outcome] || '●';
+      const badgeCls = outcomeCls[it.outcome] || 'task-pending';
+      const title = escHtml(it.title || it.external_id || '-');
+      const meta  = escHtml(`${it.source || ''} · ${(it.created_at || '').slice(0,10)}`);
+      const det   = it.details || {};
+
+      // 分数徽标（rejected/approved 才有 critic_score）
+      const score = det.critic_score != null ? det.critic_score : null;
+      const scoreColor = score == null ? '' : score >= 65
+        ? 'background:rgba(34,211,165,.15);color:var(--green)'
+        : score >= 45
+        ? 'background:rgba(246,201,14,.12);color:var(--yellow)'
+        : 'background:rgba(240,96,128,.12);color:var(--red)';
+      const scoreHtml = score != null
+        ? `<span style="font-family:'JetBrains Mono',monospace;font-size:.8rem;font-weight:700;padding:2px 8px;border-radius:5px;${scoreColor}">${score}分</span>`
+        : '';
+
+      // Extractor 痛点摘要
+      const summary = det.extractor_summary || det.extracted_complaint || '';
+      const summaryHtml = summary
+        ? `<div style="font-size:.78rem;color:var(--muted);margin-top:5px;">💬 ${escHtml(summary.slice(0,120))}</div>`
+        : '';
+
+      // Critic 拒绝理由（仅 rejected 显示）
+      const reasoning = det.critic_reasoning || '';
+      const reasoningHtml = (it.outcome === 'rejected' && reasoning)
+        ? `<div style="font-size:.76rem;color:var(--red);margin-top:3px;">🔻 ${escHtml(reasoning.slice(0,150))}</div>`
+        : '';
+
+      const urlHtml = it.url
+        ? `<a href="${escHtml(it.url)}" target="_blank" style="font-size:.75rem;color:var(--accent);word-break:break-all;display:inline-block;margin-top:5px">${escHtml(it.url.slice(0,80))}</a>`
+        : '';
+
+      return `<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--radius);padding:14px 18px;margin-bottom:10px;">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;">
+            <span class="task-status-badge ${badgeCls}">${icon} ${it.outcome}</span>
+            ${scoreHtml}
+            <span style="font-size:.75rem;color:var(--muted);margin-left:auto;white-space:nowrap;">${meta}</span>
+          </div>
+          <div style="font-size:.86rem;line-height:1.5;word-break:break-all;">${title}</div>
+          ${summaryHtml}${reasoningHtml}${urlHtml}
+        </div>`;
+    }).join('');
+    renderPagination('processed-pagination', page, Math.ceil(procTotal/20), 'loadProcessed');
+  } catch(e) { container.innerHTML = `<p style="color:var(--red)">加载失败: ${e.message}</p>`; }
+}
+
+// ── Pagination ──
+function renderPagination(containerId, current, total, callbackName) {
+  const c = document.getElementById(containerId);
+  if (total <= 1) { c.innerHTML = ''; return; }
+  let html = `<button class="page-btn" onclick="${callbackName}(${current-1})" ${current<=1?'disabled':''}>‹</button>`;
+  for (let i=1;i<=total;i++) {
+    if (total>7 && (i>3 && i<total-2 && Math.abs(i-current)>1)) {
+      if (i===4||i===total-2) html+='<span style="color:var(--muted);padding:0 4px">…</span>';
+      continue;
+    }
+    html+=`<button class="page-btn ${i===current?'active':''}" onclick="${callbackName}(${i})">${i}</button>`;
+  }
+  html+=`<button class="page-btn" onclick="${callbackName}(${current+1})" ${current>=total?'disabled':''}>›</button>`;
+  c.innerHTML = html;
+}
+
+// ── Utils ──
+function escHtml(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── Init ──
+// 数据源显示名称映射
+const SOURCE_LABELS = {
+  v2ex: 'V2EX', hackernews: 'HackerNews', reddit: 'Reddit',
+  xhs: '小红书', zhihu: '知乎',
+  producthunt: 'ProductHunt', indiehackers: 'IndieHackers',
+  appstore: 'App Store 差评', sspai: '少数派',
+  kr36: '36氪+虎嗅', twitter: 'Twitter/X', weibo: '微博热搜',
+};
+
+async function initSourceSelects() {
+  try {
+    const res = await fetch('/api/v1/sources');
+    const data = await res.json();
+    const sources = data.sources || [];
+
+    // 触发扫描下拉（无"全部"选项）
+    const scanSel = document.getElementById('scan-source');
+    scanSel.innerHTML = sources.map(s =>
+      `<option value="${s}">${SOURCE_LABELS[s] || s}</option>`
+    ).join('');
+
+    // 点子库筛选下拉（有"全部"选项）
+    const ideasSel = document.getElementById('ideas-source');
+    ideasSel.innerHTML = '<option value="">全部来源</option>' + sources.map(s =>
+      `<option value="${s}">${SOURCE_LABELS[s] || s}</option>`
+    ).join('');
+
+    // 处理记录筛选下拉（有"全部"选项）
+    const procSel = document.getElementById('proc-source');
+    procSel.innerHTML = '<option value="">全部来源</option>' + sources.map(s =>
+      `<option value="${s}">${SOURCE_LABELS[s] || s}</option>`
+    ).join('');
+  } catch(e) {
+    console.warn('数据源列表加载失败，使用默认值', e);
+    // fallback：保持原有静态选项不变
+  }
+}
+
+loadDashboard();
+initSourceSelects();
+
+// Enter key for search
+document.getElementById('ideas-search').addEventListener('keydown', e => { if(e.key==='Enter') loadIdeas(1); });
+</script>
+</body>
+</html>
