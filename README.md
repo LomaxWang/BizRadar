@@ -1,4 +1,4 @@
-# IdeaHunter
+# BizRadar
 
 ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
@@ -53,7 +53,7 @@ Results are persisted to **SQLite** and written as **Markdown PRD** files.
 ## Quick Start
 
 ```bash
-cd IdeaHunter
+cd BizRadar
 pip install -r requirements.txt
 cp .env.example .env
 # Edit .env: set LLM_API_KEY, LLM_BASE_URL, LLM_MODEL
@@ -120,8 +120,8 @@ curl http://localhost:8000/health
 docker compose up -d
 
 # Or build manually
-docker build -t ideahunter .
-docker run -p 8000:8000 --env-file .env -v ./data:/app/data -v ./output:/app/output ideahunter
+docker build -t bizradar .
+docker run -p 8000:8000 --env-file .env -v ./data:/app/data -v ./output:/app/output bizradar
 ```
 
 ## Configuration Reference
