@@ -183,7 +183,12 @@ def post_scan(
                 output_dir=settings.output_dir,
                 on_progress=prog,
                 on_event=emit,
+                is_cancelled=lambda: ldb.get_task(task_id).get("status") == "cancelled" if ldb.get_task(task_id) else False,
             )
+            # 检查是否因为取消而结束
+            current_status = ldb.get_task(task_id).get("status") if ldb.get_task(task_id) else ""
+            if current_status == "cancelled":
+                return
             ldb.update_task(
                 task_id,
                 status="completed",
@@ -278,6 +283,9 @@ def post_scan_all(
                   "count": len(active_sources)})
 
             for idx, source in enumerate(active_sources):
+                if ldb.get_task(task_id).get("status") == "cancelled":
+                    break
+                
                 emit({"type": "source_start",
                       "source": source,
                       "index": idx + 1,
@@ -298,6 +306,7 @@ def post_scan_all(
                             task_id, progress=f"[{s}] {m}"
                         ),
                         on_event=tagged_emit,
+                        is_cancelled=lambda: ldb.get_task(task_id).get("status") == "cancelled" if ldb.get_task(task_id) else False,
                     )
                     total_approved += stats.approved
                     emit({"type": "source_done",
@@ -311,9 +320,11 @@ def post_scan_all(
                           "msg": str(exc)[:150]})
                     logger.warning("全源扫描 [%s] 出错: %s", source, exc)
 
-            ldb.update_task(task_id, status="completed",
-                            progress="全源扫描完成",
-                            result_count=total_approved)
+            current_status = ldb.get_task(task_id).get("status") if ldb.get_task(task_id) else ""
+            if current_status != "cancelled":
+                ldb.update_task(task_id, status="completed",
+                                progress="全源扫描完成",
+                                result_count=total_approved)
             emit({"type": "scan_all_done",
                   "total_approved": total_approved,
                   "sources_count": len(active_sources)})
@@ -359,7 +370,11 @@ def post_ingest(
                 db=ldb,
                 output_dir=settings.output_dir,
                 on_progress=lambda m: ldb.update_task(task_id, progress=m),
+                is_cancelled=lambda: ldb.get_task(task_id).get("status") == "cancelled" if ldb.get_task(task_id) else False,
             )
+            current_status = ldb.get_task(task_id).get("status") if ldb.get_task(task_id) else ""
+            if current_status == "cancelled":
+                return
             ldb.update_task(
                 task_id,
                 status="completed",
@@ -378,6 +393,22 @@ def post_ingest(
 
     background_tasks.add_task(job)
     return ok({"task_id": task_id, "status": "pending"}, msg="Task created successfully")
+
+
+@app.post(f"{API_PREFIX}/tasks/{{task_id}}/cancel", summary="取消/停止正在运行的任务")
+def cancel_task(
+    task_id: str,
+    _: Annotated[None, Depends(require_auth)],
+    db: Annotated[SqliteManager, Depends(get_db)],
+) -> dict[str, Any]:
+    row = db.get_task(task_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail={"code": 40401, "msg": "Task Not Found"})
+    if row["status"] in ["completed", "failed", "cancelled"]:
+        return ok({"status": row["status"]}, msg="Task already finished or cancelled")
+    
+    db.update_task(task_id, status="cancelled", progress="Cancelling...")
+    return ok({"task_id": task_id, "status": "cancelled"}, msg="Task cancellation requested")
 
 
 @app.get(f"{API_PREFIX}/tasks/{{task_id}}")

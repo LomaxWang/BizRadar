@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>IdeaHunter · 商业雷达</title>
-  <meta name="description" content="IdeaHunter 可视化大盘——自动挖掘高价值 Micro-SaaS 商业机会" />
+  <title>BizRadar · 商业雷达</title>
+  <meta name="description" content="BizRadar 可视化大盘——自动挖掘高价值 Micro-SaaS 商业机会" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
@@ -229,7 +229,7 @@
     <div class="logo">
       <div class="logo-icon">🎯</div>
       <div>
-        <div class="logo-text">IdeaHunter</div>
+        <div class="logo-text">BizRadar</div>
         <div class="logo-sub">商业雷达 · v0.1</div>
       </div>
     </div>
@@ -806,7 +806,19 @@ function taskStatusHtml(t) {
     </div>
     ${t.result_count != null ? `<div class="task-count">+${t.result_count}</div>` : ''}
     <div style="font-size:.75rem;color:var(--muted);flex-shrink:0">${t.task_id?.slice(0,18)||''}</div>
+    ${(t.status === 'pending' || t.status === 'processing') ? `<button class="btn btn-ghost btn-sm" style="color:var(--red);border-color:rgba(240,96,128,0.3);flex-shrink:0" onclick="cancelTask('${t.task_id}')">⏹ 停止</button>` : ''}
   </div>`;
+}
+
+async function cancelTask(tid) {
+  if(!confirm('确定要取消此任务吗？(这可能会在当前正在处理的条目完成后才生效)')) return;
+  try {
+    await api(`/tasks/${tid}/cancel`, { method: 'POST' });
+    toast('任务已发出取消指令');
+    loadTasks(); // 刷新任务列表
+  } catch(e) {
+    toast('❌ ' + e.message, 'error');
+  }
 }
 
 let procPage = 1, procTotal = 0;

@@ -55,7 +55,7 @@ class V2EXScraper(BaseScraper):
             return []
         return data
 
-    def fetch_raw_items(self, *, max_items: Optional[int] = None) -> list[RawItem]:
+    def fetch_raw_items(self, *, max_items: Optional[int] = None, search_keywords: Optional[list[str]] = None) -> list[RawItem]:
         items: list[RawItem] = []
         for i, node in enumerate(self._nodes):
             if i:

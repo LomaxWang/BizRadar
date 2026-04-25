@@ -342,3 +342,16 @@ class SqliteManager:
             "created_at": row["created_at"],
             "updated_at": row["updated_at"],
         }
+
+    def bump_complaints(self, idea_id: str, delta: int = 1) -> None:
+        """累加 raw_complaints_analyzed（用于跨源痛点聚合）。"""
+        self._conn.execute(
+            "UPDATE ideas SET raw_complaints_analyzed = raw_complaints_analyzed + ? WHERE idea_id = ?",
+            (max(1, delta), idea_id),
+        )
+        self._conn.commit()
+
+    def delete_idea(self, idea_id: str) -> None:
+        """\u5220除被合并的重复痛点条目。"""
+        self._conn.execute("DELETE FROM ideas WHERE idea_id = ?", (idea_id,))
+        self._conn.commit()
