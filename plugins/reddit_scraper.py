@@ -58,7 +58,7 @@ class RedditScraper(BaseScraper):
         children = data.get("data", {}).get("children", [])
         return [c.get("data", {}) for c in children if c.get("data")]
 
-    def fetch_raw_items(self, *, max_items: Optional[int] = None) -> list[RawItem]:
+    def fetch_raw_items(self, *, max_items: Optional[int] = None, search_keywords: Optional[list[str]] = None) -> list[RawItem]:
         per_sub = max_items or 25
         items: list[RawItem] = []
 

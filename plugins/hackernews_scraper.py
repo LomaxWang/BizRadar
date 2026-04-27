@@ -62,7 +62,7 @@ class HackerNewsScraper(BaseScraper):
         data = r.json()
         return data.get("hits", [])
 
-    def fetch_raw_items(self, *, max_items: Optional[int] = None) -> list[RawItem]:
+    def fetch_raw_items(self, *, max_items: Optional[int] = None, search_keywords: Optional[list[str]] = None) -> list[RawItem]:
         per_tag = max_items or 25
         items: list[RawItem] = []
 

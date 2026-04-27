@@ -11,14 +11,17 @@ from typing import Optional
 
 from config.settings import Settings, get_settings
 from core.agents import run_critic, run_extractor, run_planner, run_pm
+from core.agents.competitor_research import research_competitors
+from core.agents.idea_aggregator import aggregate_ideas
+from core.agents.techlead_agent import run_techlead
 from core.memory.sqlite_manager import SqliteManager
+from core.notifier import IdeaSummary, Notifier, ReportStats
 from plugins.base_scraper import BaseScraper, RawItem
 from plugins.registry import get_scraper
 
 logger = logging.getLogger(__name__)
 
-SCORE_APPROVE_MIN = 80
-MIN_TEXT_CHARS = 12
+# 阈值由 settings 管理，在 .env 中配置 SCORE_APPROVE_MIN / MIN_TEXT_CHARS
 
 
 def _slug(s: str, max_len: int = 48) -> str:
@@ -99,6 +102,7 @@ class RunStats:
 
 
 OnProgress = Callable[[str], None]
+OnEvent = Callable[[dict], None]
 
 
 def _process_items(
@@ -109,17 +113,29 @@ def _process_items(
     output_dir: str | Path,
     keywords: Optional[list[str]] = None,
     on_progress: Optional[OnProgress] = None,
+    on_event: Optional[OnEvent] = None,
+    is_cancelled: Optional[Callable[[], bool]] = None,
     progress_prefix: str = "分析",
 ) -> RunStats:
     out = Path(output_dir)
     out.mkdir(parents=True, exist_ok=True)
     stats = RunStats(fetched=len(items))
 
+    def emit(event: dict) -> None:
+        if on_event:
+            on_event(event)
+
     def prog(msg: str) -> None:
         if on_progress:
             on_progress(msg)
 
+    emit({"type": "fetch_done", "count": len(items)})
     for idx, item in enumerate(items):
+        if is_cancelled and is_cancelled():
+            logger.info("Pipeline cancelled during processing")
+            emit({"type": "cancelled", "msg": "用户已取消"})
+            break
+
         text_len = len(item.title) + len(item.body)
         base_details: dict[str, object] = {
             "text_length": text_len,
@@ -139,12 +155,13 @@ def _process_items(
                 details={**base_details, "keywords": keywords or []},
             )
             continue
-        if text_len < MIN_TEXT_CHARS:
+        if text_len < settings.min_text_chars:
             stats.skipped_short += 1
             _mark_processed(db, item, "skipped_short", details=base_details)
             continue
 
         prog(f"{progress_prefix} {idx + 1}/{len(items)}: {item.title[:60]}…")
+        emit({"type": "item_start", "index": idx + 1, "total": len(items), "title": item.title[:80]})
 
         trace_details = dict(base_details)
         try:
@@ -156,10 +173,19 @@ def _process_items(
                     "extracted_complaint": ex.extracted_complaint,
                 }
             )
+            emit({"type": "extractor", "has_pain": ex.has_pain_point, "summary": ex.summary[:120]})
             if not ex.has_pain_point:
                 stats.dropped += 1
                 _mark_processed(db, item, "dropped", details=trace_details)
                 continue
+
+            # ── 竞品真实搜索（在 Critic 打分前执行）──
+            competitor_context = research_competitors(
+                settings.serper_api_key or "",
+                summary=ex.summary,
+            )
+            if competitor_context:
+                emit({"type": "competitor_research", "found": True, "preview": competitor_context[:100]})
 
             pm = run_pm(
                 settings,
@@ -174,6 +200,31 @@ def _process_items(
                     "persona": pm.persona,
                 }
             )
+            emit({"type": "pm_done", "user_story": pm.user_story[:100]})
+
+            # ── Tech Lead 技术可行性评估 ──
+            tl = run_techlead(
+                settings,
+                title=item.title,
+                user_story=pm.user_story,
+                persona=pm.persona,
+                summary=ex.summary,
+            )
+            trace_details.update(
+                {
+                    "tl_dev_weeks": tl.dev_weeks,
+                    "tl_feasibility": tl.feasibility_score,
+                    "tl_tech_risk": tl.tech_risk,
+                }
+            )
+            tech_context = (
+                f"[技术评估] feasibility_score={tl.feasibility_score}/100，"
+                f"dev_weeks={tl.dev_weeks}，"
+                f"主要风险：{tl.tech_risk}，"
+                f"MVP路径：{tl.mvp_approach}"
+            )
+            emit({"type": "techlead", "feasibility": tl.feasibility_score,
+                  "dev_weeks": tl.dev_weeks, "risk": tl.tech_risk[:80]})
 
             cr = run_critic(
                 settings,
@@ -181,17 +232,26 @@ def _process_items(
                 persona=pm.persona,
                 title=item.title,
                 url=item.url,
+                summary=ex.summary,
+                competitor_context=competitor_context,
+                tech_context=tech_context,
             )
             trace_details.update(
                 {
                     "critic_score": cr.score,
+                    "critic_freq_score": cr.freq_score,
+                    "critic_gap_score": cr.gap_score,
+                    "critic_roi_score": cr.roi_score,
                     "critic_reasoning": cr.reasoning,
                     "competitors_note": cr.competitors_note,
                 }
             )
+            emit({"type": "critic", "score": cr.score, "reasoning": cr.reasoning[:150],
+                  "title": item.title[:80]})
 
-            if cr.score < SCORE_APPROVE_MIN:
+            if cr.score < settings.score_approve_min:
                 stats.rejected += 1
+                emit({"type": "rejected", "title": item.title[:80], "score": cr.score})
                 _mark_processed(db, item, "rejected", details=trace_details)
                 continue
 
@@ -199,9 +259,17 @@ def _process_items(
                 settings,
                 user_story=pm.user_story,
                 persona=pm.persona,
+                extracted_complaint=ex.extracted_complaint or ex.summary,
                 critic_reasoning=cr.reasoning,
                 competitors_note=cr.competitors_note,
                 score=cr.score,
+                freq_score=cr.freq_score,
+                gap_score=cr.gap_score,
+                roi_score=cr.roi_score,
+                dev_weeks=tl.dev_weeks,
+                tl_feasibility=tl.feasibility_score,
+                tl_tech_risk=tl.tech_risk,
+                tl_mvp_approach=tl.mvp_approach,
                 title=item.title,
                 url=item.url,
                 source=item.source,
@@ -232,12 +300,15 @@ def _process_items(
             stats.approved += 1
             trace_details.update({"idea_id": idea_id, "output_path": str(fpath)})
             _mark_processed(db, item, "approved", details=trace_details)
+            emit({"type": "approved", "title": idea_title, "score": cr.score, "idea_id": idea_id})
             stats.ideas.append(
                 {
                     "idea_id": idea_id,
                     "title": idea_title,
                     "score": cr.score,
                     "path": str(fpath),
+                    "summary": ex.summary,          # 痛点摘要，语义比着标题更稳定
+                    "user_story": pm.user_story,    # 用户故事，辅助语义判断
                 }
             )
         except Exception as exc:
@@ -254,7 +325,16 @@ def _process_items(
                 },
             )
             prog(f"错误 topic {item.id}: {error_excerpt}")
+            emit({"type": "error_item", "title": item.title[:60], "error": str(exc)[:120]})
 
+    emit({
+        "type": "done",
+        "approved": stats.approved,
+        "rejected": stats.rejected,
+        "dropped": stats.dropped,
+        "errors": stats.errors,
+        "total": stats.fetched,
+    })
     return stats
 
 
@@ -268,6 +348,8 @@ def run_pipeline(
     db: Optional[SqliteManager] = None,
     output_dir: str | Path = "",
     on_progress: Optional[OnProgress] = None,
+    on_event: Optional[OnEvent] = None,
+    is_cancelled: Optional[Callable[[], bool]] = None,
 ) -> RunStats:
     settings = settings or get_settings()
     if not settings.llm_api_key:
@@ -275,11 +357,23 @@ def run_pipeline(
 
     output_dir = output_dir or settings.output_dir
     db = db or SqliteManager(settings.ideahunter_sqlite_path)
-    scraper = get_scraper(source)
+    scraper = get_scraper(source, settings=settings)
+
+    # 策略 1：从关键词池随机抽本轮搜索词
+    from plugins.registry import pick_search_keywords
+    run_keywords = pick_search_keywords(settings)
+    if run_keywords:
+        logger.info("本轮关键词搜索: %s", run_keywords)
+
     try:
-        items = scraper.fetch_raw_items(max_items=max_items)
+        items = scraper.fetch_raw_items(
+            max_items=max_items,
+            search_keywords=run_keywords or None,
+        )
     finally:
         scraper.close()
+    if on_event:
+        on_event({"type": "fetch_done", "count": len(items), "source": source})
 
     stats = _process_items(
         items,
@@ -288,11 +382,42 @@ def run_pipeline(
         output_dir=output_dir,
         keywords=keywords,
         on_progress=on_progress,
+        on_event=on_event,
+        is_cancelled=is_cancelled,
         progress_prefix="分析",
     )
+
+    # ── 跨源痛点聚合 ──
+    if stats.approved > 1:
+        merged = aggregate_ideas(db, stats.ideas)
+        if merged and on_event:
+            on_event({"type": "aggregation_done", "merged": merged})
+        if merged and on_progress:
+            on_progress(f"痛点聚合：共合并 {merged} 对重复条目")
     if mode == "daily_report":
         if on_progress:
             on_progress("daily_report 完成")
+        # 推送日报通知
+        notifier = Notifier()
+        notifier.send_daily_report(
+            ReportStats(
+                source=source,
+                fetched=stats.fetched,
+                approved=stats.approved,
+                rejected=stats.rejected,
+                errors=stats.errors,
+                ideas=[
+                    IdeaSummary(
+                        idea_id=i["idea_id"],
+                        title=i["title"],
+                        score=i["score"],
+                        source=source,
+                        path=i.get("path", ""),
+                    )
+                    for i in stats.ideas
+                ],
+            )
+        )
     return stats
 
 
@@ -300,10 +425,12 @@ def run_ingested_contents(
     *,
     source_name: str,
     content_list: list[str],
+    keywords: Optional[list[str]] = None,
     settings: Optional[Settings] = None,
     db: Optional[SqliteManager] = None,
     output_dir: str | Path = "",
     on_progress: Optional[OnProgress] = None,
+    is_cancelled: Optional[Callable[[], bool]] = None,
 ) -> RunStats:
     """将外部文本列表包装为 RawItem 并走同一流水线（webhook）。"""
     settings = settings or get_settings()
@@ -318,6 +445,8 @@ def run_ingested_contents(
         settings=settings,
         db=db,
         output_dir=output_dir,
+        keywords=keywords,
         on_progress=on_progress,
+        is_cancelled=is_cancelled,
         progress_prefix="ingest",
     )
