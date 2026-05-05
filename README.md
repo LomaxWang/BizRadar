@@ -1,5 +1,6 @@
 <div align="center">
-  <h1>🎯 BizRadar</h1>
+  <img src="assets/logo.png" width="140" alt="BizRadar Logo" style="border-radius: 20%" />
+  <h1>BizRadar</h1>
   <p><strong>你的 24 小时 AI 商业探测雷达：从海量互联网吐槽中，挖掘下一个高价值 Micro-SaaS 点子</strong></p>
 
   <p>
@@ -8,6 +9,10 @@
     <a href="https://img.shields.io/badge/license-MIT-green"><img src="https://img.shields.io/badge/license-MIT-green" alt="License"></a>
     <a href="https://img.shields.io/badge/PRs-welcome-brightgreen.svg"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg" alt="PRs Welcome"></a>
   </p>
+  
+  <br/>
+  
+  <video src="assets/demo.mp4" controls="controls" width="100%" style="max-width: 800px; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.15);"></video>
 </div>
 
 ---
@@ -30,12 +35,12 @@
 
 ## 🚀 快速部署
 
-### 方式一：一键脚本（最省事，推荐 ⭐）
+### 方式一：一键脚本
 
 在你的服务器上运行以下命令，脚本会自动完成克隆、配置和启动：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/LomaxWang/ideahunter/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/LomaxWang/ideahunter/feat/new-sources-sse-streaming/install.sh | bash
 ```
 
 > **前提条件**：服务器上已安装 `git` 和 `docker`（Docker Desktop 或 Docker Engine 均可）。
@@ -46,8 +51,8 @@ curl -fsSL https://raw.githubusercontent.com/LomaxWang/ideahunter/main/install.s
 
 **第 1 步：克隆项目**
 ```bash
-git clone https://github.com/LomaxWang/ideahunter.git
-cd ideahunter
+git clone https://github.com/LomaxWang/ideahunter.git BizRadar
+cd BizRadar
 ```
 
 **第 2 步：配置环境变量**
@@ -90,11 +95,11 @@ docker compose ps
 
 ---
 
-### 方式三：本地直接运行（适合开发调试）
+### 方式三：本地直接运行
 
 ```bash
-git clone https://github.com/LomaxWang/ideahunter.git
-cd ideahunter
+git clone https://github.com/LomaxWang/ideahunter.git BizRadar
+cd BizRadar
 
 # 安装依赖
 pip install -r requirements.txt

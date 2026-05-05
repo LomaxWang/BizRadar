@@ -47,9 +47,8 @@
       display: flex; align-items: center; gap: 10px;
       border-bottom: 1px solid var(--border);
     }
-    .logo-icon { width: 36px; height: 36px; border-radius: 10px;
-      background: linear-gradient(135deg, var(--accent), var(--accent2));
-      display: flex; align-items: center; justify-content: center; font-size: 18px; }
+    .logo-icon { width: 36px; height: 36px; border-radius: 8px; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+    .logo-icon img { width: 100%; height: 100%; object-fit: cover; }
     .logo-text { font-weight: 700; font-size: 1.1rem; letter-spacing: -0.3px; }
     .logo-sub { font-size: 0.7rem; color: var(--muted); }
     nav { padding: 16px 10px; flex: 1; }
@@ -191,6 +190,19 @@
     .task-progress { font-size: 0.82rem; color: var(--muted); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .task-count { font-family: 'JetBrains Mono',monospace; font-size: 0.85rem; font-weight: 600; color: var(--green); flex-shrink: 0; }
 
+    /* ── Share Card Canvas ── */
+    #share-card-preview {
+      display: none; position: fixed; inset: 0; z-index: 300;
+      background: rgba(0,0,0,0.85); backdrop-filter: blur(8px);
+      align-items: center; justify-content: center; flex-direction: column; gap: 18px;
+    }
+    #share-card-preview.open { display: flex; }
+    #share-card-preview canvas { border-radius: 18px; box-shadow: 0 24px 80px rgba(0,0,0,0.8); max-width: 90vw; }
+    .card-preview-actions { display: flex; gap: 12px; }
+    .card-preview-close { position: absolute; top: 20px; right: 24px; background: none; border: none;
+      color: #fff; font-size: 1.4rem; cursor: pointer; opacity: 0.7; }
+    .card-preview-close:hover { opacity: 1; }
+
     /* ── Empty / Loading ── */
     .empty { text-align: center; padding: 60px 20px; color: var(--muted); }
     .empty-icon { font-size: 3rem; margin-bottom: 14px; }
@@ -227,7 +239,7 @@
   <!-- Sidebar -->
   <aside class="sidebar">
     <div class="logo">
-      <div class="logo-icon">🎯</div>
+      <div class="logo-icon"><img src="/assets/logo.png" alt="BizRadar"></div>
       <div>
         <div class="logo-text">BizRadar</div>
         <div class="logo-sub">商业雷达 · v0.1</div>
@@ -425,11 +437,26 @@
         <div style="font-size:1.05rem;font-weight:700;margin-bottom:4px" id="modal-title"></div>
         <div style="display:flex;gap:8px;flex-wrap:wrap" id="modal-meta"></div>
       </div>
-      <button class="modal-close" onclick="closeModalDirect()">✕</button>
+      <div style="display:flex;align-items:center;gap:10px;margin-left:auto">
+        <button class="btn btn-ghost btn-sm" id="btn-share-card" onclick="generateShareCard()" title="生成分享卡片">
+          🖼️ 分享卡片
+        </button>
+        <button class="modal-close" onclick="closeModalDirect()">✕</button>
+      </div>
     </div>
     <div class="modal-body">
       <div class="prose" id="modal-prd"></div>
     </div>
+  </div>
+</div>
+
+<!-- Share Card Preview Layer -->
+<div id="share-card-preview" onclick="closeCardPreview(event)">
+  <button class="card-preview-close" onclick="closeCardPreview()">✕</button>
+  <canvas id="share-canvas"></canvas>
+  <div class="card-preview-actions">
+    <button class="btn btn-primary" onclick="downloadShareCard()">⬇️ 下载 PNG</button>
+    <button class="btn btn-ghost" onclick="closeCardPreview()">关闭</button>
   </div>
 </div>
 
@@ -560,11 +587,268 @@ async function showIdea(id) {
     ${(it.tech_stack||[]).map(t=>`<span class="tag">${escHtml(t)}</span>`).join('')}
   `;
   document.getElementById('modal-prd').innerHTML = marked.parse(it.markdown_prd || '*暂无内容*');
+  document.getElementById('btn-share-card').dataset.idea = JSON.stringify({
+    title: it.title,
+    score: it.score,
+    source: it.source || '',
+    summary: it.summary || '',
+    user_story: it.user_story || '',
+    tech_stack: it.tech_stack || [],
+    markdown_prd: it.markdown_prd || '',
+  });
   document.getElementById('modal-overlay').classList.add('open');
 }
 
 function closeModal(e) { if (e.target === document.getElementById('modal-overlay')) closeModalDirect(); }
 function closeModalDirect() { document.getElementById('modal-overlay').classList.remove('open'); }
+
+// ── Share Card Generator ──
+function closeCardPreview(e) {
+  if (!e || e.target === document.getElementById('share-card-preview') || e.currentTarget?.tagName === 'BUTTON') {
+    document.getElementById('share-card-preview').classList.remove('open');
+  }
+}
+
+function downloadShareCard() {
+  const canvas = document.getElementById('share-canvas');
+  const a = document.createElement('a');
+  a.download = 'bizradar-opportunity.png';
+  a.href = canvas.toDataURL('image/png');
+  a.click();
+}
+
+function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
+  const words = text.split('');
+  let line = '';
+  let lines = [];
+  for (let n = 0; n < words.length; n++) {
+    const testLine = line + words[n];
+    if (ctx.measureText(testLine).width > maxWidth && line.length > 0) {
+      lines.push(line);
+      line = words[n];
+    } else {
+      line = testLine;
+    }
+  }
+  lines.push(line);
+  lines.forEach((l, i) => ctx.fillText(l, x, y + i * lineHeight));
+  return lines.length;
+}
+
+function extractSection(md, keyword) {
+  const lines = md.split('\n');
+  let capture = false, result = [];
+  for (const line of lines) {
+    if (line.match(/^#+/) && line.includes(keyword)) { capture = true; continue; }
+    if (capture && line.match(/^#+/)) break;
+    if (capture && line.trim()) result.push(line.trim().replace(/^[-*>]\s*/, ''));
+    if (result.length >= 3) break;
+  }
+  return result.join(' ');
+}
+
+function extractBullets(md, keywords, max) {
+  for (const kw of keywords) {
+    const lines = md.split('\n');
+    let capture = false, result = [];
+    for (const line of lines) {
+      if (line.match(/^#+/) && line.includes(kw)) { capture = true; continue; }
+      if (capture && line.match(/^#+/)) break;
+      if (capture && line.trim()) {
+        const clean = line.trim().replace(/^[-*•›>]\s*/, '').replace(/\*\*/g,'').trim();
+        if (clean.length > 4) result.push(clean);
+      }
+      if (result.length >= max) break;
+    }
+    if (result.length) return result;
+  }
+  return [];
+}
+
+function generateShareCard() {
+  const raw = document.getElementById('btn-share-card').dataset.idea;
+  if (!raw) { toast('暂无内容，请先打开一个点子', 'error'); return; }
+  const idea = JSON.parse(raw);
+
+  const DPR = window.devicePixelRatio || 2;
+  const W = 900, H = 640;
+  const canvas = document.getElementById('share-canvas');
+  canvas.width = W * DPR; canvas.height = H * DPR;
+  canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+  const ctx = canvas.getContext('2d');
+  ctx.scale(DPR, DPR);
+
+  // ── Background ──
+  const bg = ctx.createLinearGradient(0,0,W,H);
+  bg.addColorStop(0,'#080c18'); bg.addColorStop(0.6,'#0d1528'); bg.addColorStop(1,'#080f20');
+  ctx.fillStyle=bg; ctx.beginPath(); ctx.roundRect(0,0,W,H,20); ctx.fill();
+
+  // Decorative orbs
+  [[110,90,230,'rgba(79,156,249,0.14)'],[W-70,H-70,190,'rgba(124,58,237,0.12)'],[W*0.55,H,260,'rgba(34,211,165,0.07)']].forEach(([cx,cy,r,c])=>{
+    const g=ctx.createRadialGradient(cx,cy,0,cx,cy,r); g.addColorStop(0,c); g.addColorStop(1,'transparent');
+    ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+  });
+
+  // ── Top accent bar ──
+  const bar=ctx.createLinearGradient(0,0,W,0);
+  bar.addColorStop(0,'#4f9cf9'); bar.addColorStop(0.5,'#7c3aed'); bar.addColorStop(1,'#22d3a5');
+  ctx.fillStyle=bar; ctx.beginPath(); ctx.roundRect(0,0,W,4,[20,20,0,0]); ctx.fill();
+
+  // ── Logo (top-left) ──
+  const lg=ctx.createLinearGradient(24,18,62,56);
+  lg.addColorStop(0,'#4f9cf9'); lg.addColorStop(1,'#7c3aed');
+  ctx.fillStyle=lg; ctx.beginPath(); ctx.roundRect(24,14,42,42,11); ctx.fill();
+  ctx.font='22px sans-serif'; ctx.textAlign='left'; ctx.fillStyle='#fff'; ctx.fillText('🎯',28,44);
+  ctx.font='bold 15px Inter,sans-serif'; ctx.fillStyle='rgba(255,255,255,0.82)'; ctx.fillText('BizRadar',74,32);
+  ctx.font='11px Inter,sans-serif'; ctx.fillStyle='rgba(255,255,255,0.36)'; ctx.fillText('商业雷达 · AI 商机探测',74,50);
+
+  // ── Score badge (top-right) ──
+  const sc=idea.score>=85?'#22d3a5':'#f6c90e';
+  ctx.fillStyle=idea.score>=85?'rgba(34,211,165,0.12)':'rgba(246,201,14,0.10)';
+  ctx.beginPath(); ctx.roundRect(W-108,10,86,54,14); ctx.fill();
+  ctx.strokeStyle=sc+'55'; ctx.lineWidth=1; ctx.beginPath(); ctx.roundRect(W-108,10,86,54,14); ctx.stroke();
+  ctx.fillStyle=sc; ctx.font='bold 28px "JetBrains Mono",monospace'; ctx.textAlign='center';
+  ctx.fillText(idea.score,W-65,48);
+  ctx.font='10px Inter,sans-serif'; ctx.fillStyle='rgba(255,255,255,0.42)'; ctx.fillText('商业评分',W-65,62);
+
+  // ── Header divider ──
+  ctx.strokeStyle='rgba(99,179,237,0.10)'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(24,72); ctx.lineTo(W-24,72); ctx.stroke();
+
+  // ── Title ──
+  ctx.textAlign='left'; ctx.fillStyle='#e8edf8'; ctx.font='bold 24px Inter,sans-serif';
+  const titleN = wrapText(ctx, idea.title, 32, 100, W-70, 34);
+  const afterTitle = 88 + titleN*34;
+
+  // ── Source + date tags ──
+  let tagX=32;
+  const dateShort = new Date().toLocaleDateString('zh-CN',{month:'short',day:'numeric'});
+  [[idea.source,'rgba(124,58,237,0.22)','#a78bfa'],['📅 '+dateShort,'rgba(79,156,249,0.12)','#60a5fa']].forEach(([lbl,tbg,tfg])=>{
+    if(!lbl) return;
+    ctx.font='11px Inter,sans-serif';
+    const tw=ctx.measureText(lbl).width+18;
+    ctx.fillStyle=tbg; ctx.beginPath(); ctx.roundRect(tagX,afterTitle,tw,20,5); ctx.fill();
+    ctx.fillStyle=tfg; ctx.fillText(lbl,tagX+9,afterTitle+14);
+    tagX+=tw+8;
+  });
+
+  // ── Body divider ──
+  const bodyTop = afterTitle+32;
+  ctx.strokeStyle='rgba(99,179,237,0.07)'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(24,bodyTop); ctx.lineTo(W-24,bodyTop); ctx.stroke();
+
+  // Layout columns
+  const LX=32, LW=472, RX=524, RW=W-RX-28;
+  let ly=bodyTop+20, ry=bodyTop+20;
+
+  // ── LEFT: Insight quote ──
+  const insight=idea.user_story||idea.summary||extractSection(idea.markdown_prd,'痛点')||extractSection(idea.markdown_prd,'pain')||'';
+  if(insight){
+    ctx.fillStyle='#4f9cf9'; ctx.beginPath(); ctx.roundRect(LX,ly,3,52,2); ctx.fill();
+    ctx.font='italic 13px Inter,sans-serif'; ctx.fillStyle='rgba(226,232,247,0.58)';
+    const q=`"${insight.slice(0,100)}${insight.length>100?'…':''}"`;
+    const qn=wrapText(ctx,q,LX+12,ly+14,LW-16,22);
+    ly+=Math.max(qn*22+26,60);
+  }
+
+  // ── LEFT: Pain bullets ──
+  ctx.font='bold 11px Inter,sans-serif'; ctx.fillStyle='rgba(240,96,128,0.85)';
+  ctx.fillText('⚡ 核心痛点',LX,ly); ly+=18;
+  const pains=extractBullets(idea.markdown_prd,['痛点溯源','痛点','Pain'],3);
+  ctx.font='13px Inter,sans-serif';
+  pains.forEach((pt)=>{
+    ctx.fillStyle='rgba(240,96,128,0.65)'; ctx.fillText('•',LX+2,ly);
+    ctx.fillStyle='rgba(226,232,247,0.78)';
+    const lineCount = wrapText(ctx, pt.slice(0,60)+(pt.length>60?'…':''), LX+14, ly, LW-24, 20);
+    ly += lineCount * 20 + 8;
+  });
+  if(pains.length) ly+=6;
+
+  // ── LEFT: Pricing hint ──
+  const pricing=extractSection(idea.markdown_prd,'定价')||extractSection(idea.markdown_prd,'收费')||'';
+  if(pricing){
+    ctx.font='bold 11px Inter,sans-serif'; ctx.fillStyle='rgba(246,201,14,0.85)';
+    ctx.fillText('💰 变现方向',LX,ly); ly+=17;
+    ctx.font='12px Inter,sans-serif'; ctx.fillStyle='rgba(226,232,247,0.58)';
+    wrapText(ctx,pricing.slice(0,72)+(pricing.length>72?'…':''),LX+6,ly,LW-16,18);
+    ly+=26;
+  }
+
+  // ── LEFT: Cold-start hint ──
+  const coldstart=extractSection(idea.markdown_prd,'冷启动')||extractSection(idea.markdown_prd,'获客')||'';
+  if(coldstart && ly < H-100){
+    ctx.font='bold 11px Inter,sans-serif'; ctx.fillStyle='rgba(34,211,165,0.85)';
+    ctx.fillText('🚀 冷启动策略',LX,ly); ly+=17;
+    ctx.font='12px Inter,sans-serif'; ctx.fillStyle='rgba(226,232,247,0.55)';
+    wrapText(ctx,coldstart.slice(0,72)+(coldstart.length>72?'…':''),LX+6,ly,LW-16,18);
+  }
+
+  // ── Vertical separator ──
+  ctx.strokeStyle='rgba(99,179,237,0.07)'; ctx.lineWidth=1; ctx.setLineDash([4,5]);
+  ctx.beginPath(); ctx.moveTo(RX-16,bodyTop+8); ctx.lineTo(RX-16,H-50); ctx.stroke();
+  ctx.setLineDash([]);
+
+  // ── RIGHT: Core features ──
+  ctx.font='bold 11px Inter,sans-serif'; ctx.fillStyle='rgba(79,156,249,0.88)';
+  ctx.fillText('🚀 核心功能',RX,ry); ry+=18;
+  const feats=extractBullets(idea.markdown_prd,['产品定义','核心功能','核心三功能','功能','Feature'],4);
+  feats.forEach((f,i)=>{
+    const fh=28;
+    ctx.fillStyle='rgba(79,156,249,0.07)'; ctx.beginPath(); ctx.roundRect(RX,ry+i*(fh+6),RW,fh,7); ctx.fill();
+    ctx.strokeStyle='rgba(79,156,249,0.16)'; ctx.lineWidth=1; ctx.beginPath(); ctx.roundRect(RX,ry+i*(fh+6),RW,fh,7); ctx.stroke();
+    ctx.fillStyle='rgba(79,156,249,0.75)'; ctx.font='bold 13px Inter,sans-serif'; ctx.fillText('›',RX+8,ry+i*(fh+6)+19);
+    ctx.fillStyle='rgba(226,232,247,0.82)'; ctx.font='13px Inter,sans-serif';
+    ctx.fillText(f.slice(0,26)+(f.length>26?'…':''),RX+22,ry+i*(fh+6)+19);
+  });
+  ry+=feats.length*(28+6)+18;
+
+  // ── RIGHT: Score meter ──
+  ctx.font='bold 11px Inter,sans-serif'; ctx.fillStyle='rgba(255,255,255,0.38)';
+  ctx.fillText('📊 商业评分',RX,ry); ry+=15;
+  ctx.fillStyle='rgba(255,255,255,0.07)'; ctx.beginPath(); ctx.roundRect(RX,ry,RW,10,5); ctx.fill();
+  const mg=ctx.createLinearGradient(RX,0,RX+RW,0);
+  mg.addColorStop(0,'#4f9cf9'); mg.addColorStop(0.6,'#7c3aed'); mg.addColorStop(1,'#22d3a5');
+  ctx.fillStyle=mg; ctx.beginPath(); ctx.roundRect(RX,ry,Math.round(RW*idea.score/100),10,5); ctx.fill();
+  ctx.fillStyle=sc; ctx.font='bold 11px "JetBrains Mono",monospace'; ctx.textAlign='right';
+  ctx.fillText(idea.score+'分',RX+RW,ry+22); ctx.textAlign='left';
+  ry+=32;
+
+  // ── RIGHT: Tech stack ──
+  if(idea.tech_stack?.length){
+    ctx.font='bold 11px Inter,sans-serif'; ctx.fillStyle='rgba(255,255,255,0.36)';
+    ctx.fillText('🔧 技术栈',RX,ry); ry+=16;
+    let tx=RX; ctx.font='bold 11px Inter,sans-serif';
+    idea.tech_stack.slice(0,6).forEach(t=>{
+      const tw=ctx.measureText(t).width+16;
+      if(tx+tw>RX+RW){ tx=RX; ry+=26; }
+      ctx.fillStyle='rgba(34,211,165,0.09)'; ctx.beginPath(); ctx.roundRect(tx,ry,tw,20,5); ctx.fill();
+      ctx.strokeStyle='rgba(34,211,165,0.20)'; ctx.lineWidth=1; ctx.beginPath(); ctx.roundRect(tx,ry,tw,20,5); ctx.stroke();
+      ctx.fillStyle='#22d3a5'; ctx.fillText(t,tx+8,ry+14); tx+=tw+6;
+    });
+    ry+=30;
+  }
+
+  // ── RIGHT: Competitor note ──
+  const comp=extractSection(idea.markdown_prd,'竞品')||extractSection(idea.markdown_prd,'竞争')||'';
+  if(comp && ry < H-80){
+    ctx.font='bold 11px Inter,sans-serif'; ctx.fillStyle='rgba(167,139,250,0.85)';
+    ctx.fillText('🏁 竞品分析',RX,ry); ry+=16;
+    ctx.font='12px Inter,sans-serif'; ctx.fillStyle='rgba(226,232,247,0.55)';
+    wrapText(ctx,comp.slice(0,64)+(comp.length>64?'…':''),RX,ry,RW,18);
+  }
+
+  // ── Bottom divider ──
+  ctx.strokeStyle='rgba(99,179,237,0.07)'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(24,H-42); ctx.lineTo(W-24,H-42); ctx.stroke();
+
+  // ── Footer ──
+  const dateStr=new Date().toLocaleDateString('zh-CN',{year:'numeric',month:'short',day:'numeric'});
+  ctx.font='10px Inter,sans-serif'; ctx.fillStyle='rgba(255,255,255,0.20)';
+  ctx.textAlign='left'; ctx.fillText(`📡 BizRadar AI 自动分析生成 · ${dateStr}`,32,H-18);
+  ctx.textAlign='right'; ctx.fillText('github.com/LomaxWang/ideahunter',W-32,H-18);
+
+  document.getElementById('share-card-preview').classList.add('open');
+}
 
 // ── 工具：保存 task_id 到 sessionStorage ──
 function saveTaskId(tid) {
