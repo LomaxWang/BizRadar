@@ -209,3 +209,4 @@ __marimo__/
 # IdeaHunter artifacts
 data/*.db
 output/*.md
+.env
