@@ -80,8 +80,13 @@ app.add_exception_handler(
     ),
 )
 
-# 挂载静态 Web UI
+# 挂载静态资源与 Web UI
 _WEB_DIR = _ROOT / "web"
+_ASSETS_DIR = _ROOT / "assets"
+
+if _ASSETS_DIR.exists():
+    app.mount("/assets", StaticFiles(directory=str(_ASSETS_DIR)), name="assets")
+
 if _WEB_DIR.exists():
     app.mount("/web", StaticFiles(directory=str(_WEB_DIR)), name="web")
 

@@ -1,11 +1,31 @@
 services:
-  ideahunter:
-    build: .
+  bizradar:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: bizradar:latest
+    container_name: bizradar
     ports:
-      - "8000:8000"
+      - "${PORT:-8000}:8000"
     volumes:
-      - ./data:/app/data
-      - ./output:/app/output
+      # Persist the SQLite database and generated PRD files across restarts
+      - bizradar_data:/app/data
+      - bizradar_output:/app/output
     env_file:
       - .env
     restart: unless-stopped
+    # Resource limits – adjust to your VPS specs
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  bizradar_data:
+  bizradar_output:
