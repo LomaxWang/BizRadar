@@ -8,10 +8,11 @@
     <a href="https://img.shields.io/badge/docker-ready-2496ED"><img src="https://img.shields.io/badge/docker-ready-2496ED?logo=docker&logoColor=white" alt="Docker"></a>
     <a href="https://img.shields.io/badge/license-MIT-green"><img src="https://img.shields.io/badge/license-MIT-green" alt="License"></a>
     <a href="https://img.shields.io/badge/PRs-welcome-brightgreen.svg"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg" alt="PRs Welcome"></a>
-  </p>
+  <br/>
+  <video controls width="100%">
+    <source src="./assets/demo.mp4" type="video/mp4">
+  </video>
 </div>
-
-https://github.com/LomaxWang/BizRadar/raw/feat/new-sources-sse-streaming/assets/demo.mp4
 
 ---
 
