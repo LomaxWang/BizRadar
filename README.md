@@ -8,11 +8,10 @@
     <a href="https://img.shields.io/badge/docker-ready-2496ED"><img src="https://img.shields.io/badge/docker-ready-2496ED?logo=docker&logoColor=white" alt="Docker"></a>
     <a href="https://img.shields.io/badge/license-MIT-green"><img src="https://img.shields.io/badge/license-MIT-green" alt="License"></a>
     <a href="https://img.shields.io/badge/PRs-welcome-brightgreen.svg"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg" alt="PRs Welcome"></a>
-  </p>
-  
   <br/>
-  
-  <video src="assets/demo.mp4" controls="controls" width="100%" style="max-width: 800px; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.15);"></video>
+  <video controls width="100%">
+    <source src="./assets/demo.mp4" type="video/mp4">
+  </video>
 </div>
 
 
